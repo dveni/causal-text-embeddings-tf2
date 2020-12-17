@@ -2,7 +2,7 @@
 import io
 import os
 import json
-from PeerRead.data_cleaning.ScienceParse import ScienceParse
+from PeerRead.data_cleaning.ScienceParse.ScienceParse import ScienceParse
 
 class ScienceParseReader:
   """
@@ -11,7 +11,7 @@ class ScienceParseReader:
 
   @staticmethod
   def read_science_parse(paperid, title, abstract, scienceparse_dir):
-    scienceparse_file = io.open(os.path.join(scienceparse_dir, '{0}.pdf.json'.format(paperid)))
+    scienceparse_file = io.open(os.path.join(scienceparse_dir, '{0}.pdf.json'.format(paperid)), encoding="utf8")
     # scienceparse_file = io.open('%s%s.pdf.json'%(scienceparse_dir,paperid), "r", encoding="utf8")
     scienceparse_str = scienceparse_file.read()
     scienceparse_data = json.loads(scienceparse_str)

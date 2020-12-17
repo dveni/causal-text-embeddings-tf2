@@ -6,22 +6,26 @@ Takes in JSON formatted data from ScienceParse and outputs a tfrecord
 Reference example:
 https://github.com/tensorlayer/tensorlayer/blob/9528da50dfcaf9f0f81fba9453e488a1e6c8ee8f/examples/data_process/tutorial_tfrecord3.py
 """
+import sys
+sys.path.append(r'C:\Users\veran\Workspace\GSI\causal-text-embeddings-tf2\src')
 
+print(sys.path)
 import argparse
 import glob
 import os
 import random
+import csv
 
 import io
 import json
 from dateutil.parser import parse as parse_date
 
-import tensorflow as tf
+#import tensorflow as tf
 
 import bert.tokenization as tokenization
-from PeerRead import Paper
-from PeerRead import ScienceParseReader
-from PeerRead.data_cleaning import get_PeerRead_hand_features
+from PeerRead.data_cleaning.ScienceParse.Paper import Paper
+from PeerRead.data_cleaning.ScienceParse.ScienceParseReader import ScienceParseReader
+from PeerRead.data_cleaning import PeerRead_hand_features as prhf
 
 rng = random.Random(0)
 
@@ -48,11 +52,28 @@ def process_json_paper(paper_json_filename, scienceparse_dir, tokenizer):
                         'name': paper.ID}
 
     # add hand crafted features from PeerRead
-    pr_hand_features = get_PeerRead_hand_features(paper)
+    pr_hand_features = prhf.get_PeerRead_hand_features(paper)
     context_features.update(pr_hand_features)
 
     return text_features, context_features
 
+def process_json_paper2(paper_json_filename, scienceparse_dir, tokenizer):
+    paper = Paper.from_json(paper_json_filename)
+    paper.SCIENCEPARSE = ScienceParseReader.read_science_parse(paper.ID, paper.TITLE, paper.ABSTRACT,
+                                                               scienceparse_dir)
+
+    text_features = {'title': paper.TITLE,
+                     'abstract': paper.ABSTRACT}
+
+    context_features = {'authors': paper.AUTHORS,
+                        'accepted': paper.ACCEPTED,
+                        'name': paper.ID}
+
+    # add hand crafted features from PeerRead
+    pr_hand_features = prhf.get_PeerRead_hand_features(paper)
+    context_features.update(pr_hand_features)
+
+    return text_features, context_features
 
 def bert_process_sentence(example_tokens, max_seq_length, tokenizer):
     """
@@ -259,6 +280,52 @@ def clean_PeerRead_dataset(review_json_dir, parsedpdf_json_dir,
             paper_ex = paper_to_bert_Example(text_features, context_features,
                                              max_seq_length=max_abs_len, tokenizer=tokenizer)
             writer.write(paper_ex.SerializeToString())
+def clean_PeerRead_dataset2(review_json_dir, parsedpdf_json_dir,
+                           venue, year,
+                           out_dir, out_file,
+                           max_abs_len, tokenizer,
+                           default_accept=1,
+                           is_arxiv = False):
+
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+
+    print('Reading reviews from...', review_json_dir)
+    paper_json_filenames = sorted(glob.glob('{}/*.json'.format(review_json_dir)))
+
+    with open(out_dir + "/" + out_file, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file, delimiter=',',  quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        for idx, paper_json_filename in enumerate(paper_json_filenames):
+            text_features, context_features = process_json_paper2(paper_json_filename, parsedpdf_json_dir, tokenizer)
+
+            if context_features['accepted'] is None:  # missing for conferences other than ICLR (we only see accepts)
+                context_features['accepted'] = default_accept
+
+            many_split = rng.randint(0, 100)  # useful for easy data splitting later
+
+            # other context features
+            arxiv = -1
+            if is_arxiv:
+                with io.open(paper_json_filename) as json_file:
+                    loaded = json.load(json_file)
+                year = parse_date(loaded['DATE_OF_SUBMISSION']).year
+                venue = _venues(loaded['conference'])
+                arxiv = _arxiv_subject([loaded['SUBJECTS']])
+
+            extra_context = {'id': idx, 'venue': venue, 'year': year, 'many_split': many_split,
+                             'arxiv': arxiv}
+            context_features.update(extra_context)
+
+            text_columns=[]
+            context_columns=[]
+
+            for value in text_features.values():
+                text_columns.append(value)
+            for value in context_features.values():
+                context_columns.append(value)
+            columns = text_columns + context_columns
+            writer.writerow(columns)
 
 
 def main():
@@ -267,8 +334,8 @@ def main():
     parser.add_argument('--review-json-dir', type=str, default='../dat/PeerRead/arxiv.all/all/reviews')
     parser.add_argument('--parsedpdf-json-dir', type=str, default='../dat/PeerRead/arxiv.all/all/parsed_pdfs')
     parser.add_argument('--out-dir', type=str, default='../dat/PeerRead/proc')
-    parser.add_argument('--out-file', type=str, default='arxiv-all.tf_record')
-    parser.add_argument('--vocab-file', type=str, default='../../bert/pre-trained/uncased_L-12_H-768_A-12/vocab.txt')
+    parser.add_argument('--out-file', type=str, default='arxiv-all.csv')
+    parser.add_argument('--vocab-file', type=str, default='../pre-trained/uncased_L-12_H-768_A-12/vocab.txt')
     parser.add_argument('--max-abs-len', type=int, default=250)
     parser.add_argument('--venue', type=int, default=0)
     parser.add_argument('--year', type=int, default=2017)
@@ -279,10 +346,10 @@ def main():
     tokenizer = tokenization.FullTokenizer(
         vocab_file=args.vocab_file, do_lower_case=True)
 
-    clean_PeerRead_dataset(args.review_json_dir, args.parsedpdf_json_dir,
+    clean_PeerRead_dataset2(args.review_json_dir, args.parsedpdf_json_dir,
                            args.venue, args.year,
                            args.out_dir, args.out_file,
-                           args.max_abs_len, tokenizer, is_arxiv=True)
+                           args.max_abs_len,tokenizer, is_arxiv=True)
 
 
 if __name__ == "__main__":
