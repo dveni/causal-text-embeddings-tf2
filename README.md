@@ -12,6 +12,8 @@ including instructions to reproduce the experiments, is available [here](https:/
 
 There is also a [reference implementation in pytorch.](https://github.com/rpryzant/causal-bert-pytorch)
 
+[Notebook with Pytorch implementation reproducing PeerRead experiment results](https://colab.research.google.com/drive/1jMy57N7wfoP4ZxHpp_vGJYOsAUOU7Cjm?usp=sharing#scrollTo=DQZx1-Ct3tu3)
+
 All code in tf_official is taken from https://github.com/tensorflow/models/tree/master/official 
 (and subject to their liscensing requirements)
 
